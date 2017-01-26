@@ -45,6 +45,7 @@ public class BT123 {
         
         return URL;
     }
+    
     private static String getStringFromInputStream(InputStream is) {
 
 	BufferedReader br = null;
@@ -70,7 +71,20 @@ public class BT123 {
             }
 
             return sb.toString();
-	}
+    }
+    
+    private void threadRx(StreamConnection sc) {
+        BT_SPP_SERVER_RX rx = new BT_SPP_SERVER_RX();
+        rx.setSc(sc);
+        rx.main(null);
+    }
+    
+    private void threadTx(StreamConnection sc) {
+        BT_SPP_SERVER_TX tx = new BT_SPP_SERVER_TX();
+        tx.setSc(sc);
+        tx.main(null);
+    }
+    
     
     /* Public Method */
     public void btInit() throws BluetoothStateException {
@@ -93,21 +107,117 @@ public class BT123 {
     
     public void btConn() {
         String connURL = getServerURL(URL_SCHEME_BTSPP, "2d26618601fb47c28d9f10b8ec891363", false, false, "MyBt");
-        
-        try {
-            
+
+        try {            
             StreamConnectionNotifier scn = (StreamConnectionNotifier)Connector.open(connURL);// Create a server connection (a notifier)
             
             StreamConnection sc = scn.acceptAndOpen();// Accept a new client connection
-            
-            
-            InputStream is =sc.openInputStream();
-            
-            System.out.println("[Message From Client] >> " + getStringFromInputStream(is));
+                        
+            // Thread: Server's TX
+            threadTx(sc);
+            // Thread: Server's RX
+            threadRx(sc);
+            // Thread: Keep Main Thread Run...
+            for(;;);
             
         } catch (IOException ex) {
             Logger.getLogger(BT123.class.getName()).log(Level.SEVERE, null, ex);
+        }    
+    } 
+}
+
+class BT_SPP_SERVER_RX extends Thread {
+    private static StreamConnection sc = null;
+  
+    public void run() {
+        System.out.println("[THREAD] spp rx thread start up!!");
+        
+        try {
+            if(getSc() != null) {
+                final InputStream is = getSc().openInputStream();
+                final byte[] buffer = new byte[1024];
+                
+                for(;;) {
+                    final int readBytes = is.read(buffer);
+                    final String receivedMessage = new String(buffer, 0, readBytes);
+                
+                    System.out.println("[SERVER] Rx: " + receivedMessage);
+                }
+            }
+        
+        } catch (IOException ex) {
+            Logger.getLogger(BT_SPP_SERVER_RX.class.getName()).log(Level.SEVERE, null, ex);
+        }    
+    }
+
+    public static void main(String args[]) {
+        (new BT_SPP_SERVER_RX()).start();
+    }
+    
+    public void setSc(StreamConnection sc) {
+         if(sc != null) {
+            //System.out.println("[rx][set sc]");
+            this.sc = sc;    
+         }
+    }
+    
+    private StreamConnection getSc() {
+        if(this.sc != null) {
+            //System.out.println("[rx][get sc]");
+            return this.sc;
+        } else {
+            System.out.println("[rx][sc is null]");
+            return null;
+        }
+    }
+}
+
+class BT_SPP_SERVER_TX extends Thread {
+    private static StreamConnection sc = null;
+            
+    public void run()  {
+        System.out.println("[THREAD] spp tx thread start up!!");
+     
+        String message = "Welcome!!";
+ 
+        DataOutputStream os = null;
+        try {
+            os = getSc().openDataOutputStream();
+            
+            java.io.InputStream in = System.in;
+            char c = 0;
+            do {
+                if(c != 0 && c != '\n') message += c;
+                
+                if(c == '\n' || message.equals("Welcome!!")) {
+                    os.write(message.getBytes());
+                    os.flush();
+                    message = "";
+                }
+            } while((c = (char) in.read()) > 0);
+            
+        } catch (IOException ex) {
+            Logger.getLogger(BT_SPP_SERVER_TX.class.getName()).log(Level.SEVERE, null, ex);
         }
         
+    }
+    
+    public static void main(String args[]) {
+        (new BT_SPP_SERVER_TX()).start();
+    }
+    
+    public void setSc(StreamConnection sc) {
+         if(sc != null) {
+            this.sc = sc;    
+         }
+    }
+    
+    private StreamConnection getSc() {
+        if(this.sc != null) {
+            return this.sc;
+        } else {
+            System.out.println("[tx][sc is null]");
+            return null;
+        }
     }
 }
